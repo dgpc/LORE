@@ -1,5 +1,10 @@
 # lore: Edison V3 MicroPython CLI Tool
 
+<p align="center">
+  <img src="edison_v3.png" width="240">
+  <img src="lore.png" width="240">
+</p>
+
 **lore** is a command-line utility for interacting with the Edison V3 robot, providing an enhanced development workflow for MicroPython programs. It allows you to build and flash your programs to the Edison V3 directly from your local filesystem.
 
 For more information about the Edison V3 robot, you can visit the official resource page: [Edison V3.0 Robot](https://www.geyerinstructional.com/edison-v3-0-robot-edpack).
