@@ -1,0 +1,11 @@
+TO CIRCLE
+  REPEAT 360 [
+    FORWARD 1
+    RIGHT 1
+  ]
+END
+
+REPEAT 45 [
+  CIRCLE
+  LEFT 8
+]

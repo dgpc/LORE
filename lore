@@ -7,6 +7,7 @@ import os
 import sys
 import requests
 import json
+import re
 
 # EdisonV3 USB constants
 RELESE_VENDOR_ID = 0x16D0
@@ -20,10 +21,34 @@ REMOTE_COMPILE_API_URL = "https://api.edisonrobotics.net/ep/compile/ep_compile_u
 
 def transpile_logo_to_py(logo_file_path: str, py_file_path: str):
     """
-    Transpiles a .logo file with basic LOGO commands to an EdPy .py file.
+    Transpiles a .logo file with LOGO commands (including REPEAT and TO...END) to an EdPy .py file.
+    This version uses a two-pass approach to handle function definitions by inlining them.
     """
     print(f"Transpiling {logo_file_path} to {py_file_path}...")
+
+    with open(logo_file_path, 'r') as f:
+        lines = [line.strip().upper() for line in f if line.strip()]
+
+    # --- Pass 1: Store function definitions ---
+    functions = {}
+    in_function_def = False
+    current_function_name = None
     
+    for line in lines:
+        if line.startswith("TO "):
+            in_function_def = True
+            current_function_name = line.split()[1]
+            functions[current_function_name] = []
+            continue
+        elif line == "END" and in_function_def:
+            in_function_def = False
+            current_function_name = None
+            continue
+        
+        if in_function_def and current_function_name:
+            functions[current_function_name].append(line)
+
+    # --- Pass 2: Generate code by expanding functions and loops ---
     edpy_code = [
         "import Ed",
         "",
@@ -34,33 +59,92 @@ def transpile_logo_to_py(logo_file_path: str, py_file_path: str):
         ""
     ]
 
-    with open(logo_file_path, 'r') as f:
-        for line in f:
-            line = line.strip().upper()
-            if not line:
-                continue
+    def process_block(block_lines, indent_level=0):
+        """ Recursively processes a block of LOGO commands. """
+        output = []
+        i = 0
+        while i < len(block_lines):
+            line = block_lines[i]
+            i += 1
 
+            if line.startswith("TO ") or (line == "END" and not block_lines[i-2].startswith("REPEAT")): # Simple check
+                # Skip function definition lines during code generation pass
+                if line == "END":
+                    # Fast-forward past the function body if we somehow re-enter one
+                    while i < len(block_lines) and block_lines[i] != "END":
+                        i+=1
+                continue
+            
             parts = line.split()
             command = parts[0]
-            
+            indent = "    " * indent_level
+
+            # Handle REPEAT loops
+            repeat_match = re.match(r"REPEAT\s+(\d+)\s*\[", line)
+            if repeat_match:
+                count = int(repeat_match.group(1))
+                output.append(indent + f"for i in range({count}):")
+                
+                # Find matching ']'
+                bracket_level = 1
+                repeat_block = []
+                while i < len(block_lines):
+                    sub_line = block_lines[i]
+                    i += 1
+                    if "REPEAT" in sub_line and '[' in sub_line:
+                        bracket_level += 1
+                    if ']' in sub_line:
+                        bracket_level -= 1
+                    
+                    if bracket_level == 0:
+                        # process the content inside the brackets
+                        content = sub_line.replace(']', '').strip()
+                        if content:
+                            repeat_block.append(content)
+                        break
+                    else:
+                        repeat_block.append(sub_line)
+                
+                output.extend(process_block(repeat_block, indent_level + 1))
+                continue
+
             try:
-                if command == "FORWARD" and len(parts) == 2:
+                # Expand user-defined functions
+                if command in functions:
+                    output.extend(process_block(functions[command], indent_level))
+                # Basic commands
+                elif command == "FORWARD" and len(parts) == 2:
                     value = int(parts[1])
-                    edpy_code.append(f"Ed.Drive(Ed.FORWARD, Ed.SPEED_5, {value})")
+                    output.append(indent + f"Ed.Drive(Ed.FORWARD, Ed.SPEED_5, {value})")
                 elif command == "BACK" and len(parts) == 2:
                     value = int(parts[1])
-                    edpy_code.append(f"Ed.Drive(Ed.BACKWARD, Ed.SPEED_5, {value})")
+                    output.append(indent + f"Ed.Drive(Ed.BACKWARD, Ed.SPEED_5, {value})")
                 elif command == "LEFT" and len(parts) == 2:
                     value = int(parts[1])
-                    edpy_code.append(f"Ed.Drive(Ed.SPIN_LEFT, Ed.SPEED_5, {value})")
+                    output.append(indent + f"Ed.Drive(Ed.SPIN_LEFT, Ed.SPEED_5, {value})")
                 elif command == "RIGHT" and len(parts) == 2:
                     value = int(parts[1])
-                    edpy_code.append(f"Ed.Drive(Ed.SPIN_RIGHT, Ed.SPEED_5, {value})")
-                else:
+                    output.append(indent + f"Ed.Drive(Ed.SPIN_RIGHT, Ed.SPEED_5, {value})")
+                elif command:
                     print(f"Warning: Unsupported LOGO command '{line}' found. Skipping.", file=sys.stderr)
+
             except (ValueError, IndexError):
                 print(f"Warning: Invalid format for LOGO command '{line}'. Skipping.", file=sys.stderr)
+        return output
 
+    # Process only the main body lines (not inside a TO...END block)
+    main_lines = []
+    in_def = False
+    for line in lines:
+        if line.startswith("TO "):
+            in_def = True
+        if not in_def:
+            main_lines.append(line)
+        if line == "END":
+            in_def = False
+
+    edpy_code.extend(process_block(main_lines))
+    
     with open(py_file_path, 'w') as f:
         f.write("\n".join(edpy_code))
     
@@ -69,8 +153,7 @@ def transpile_logo_to_py(logo_file_path: str, py_file_path: str):
 
 def process_api_hex_string(input_hex_str):
     """
-    Converts a hexadecimal string into a bytearray,
-    matching the logic of the web app's processAPIHexString function.
+    Converts a hexadecimal string into a bytearray.
     """
     prog_size = len(input_hex_str) // 2
     user_prog_data = bytearray(prog_size)
@@ -81,13 +164,13 @@ def process_api_hex_string(input_hex_str):
         user_prog_data[i // 2] = num_data
         
     if prog_size > 2048:
-        print("Warning: Program size exceeds 2048 bytes. This might cause issues on the device.", file=sys.stderr)
+        print("Warning: Program size exceeds 2048 bytes.", file=sys.stderr)
     
     return user_prog_data
 
 def calculate_checksum(data: bytearray) -> int:
     """
-    Calculates the 16-bit XOR checksum based on the web app's logic.
+    Calculates the 16-bit XOR checksum.
     """
     checksum = 0
     lower_byte = True
@@ -102,55 +185,39 @@ def calculate_checksum(data: bytearray) -> int:
 
 def find_edison_v3():
     """Finds the Edison V3 device."""
-    print("Attempting to find Edison V3 device...")
     dev = usb.core.find(idVendor=RELESE_VENDOR_ID, idProduct=RELESE_PRODUCT_ID)
     if dev is None:
-        raise ValueError("Edison V3 not found. Is it connected and powered on?")
-    print(f"Edison V3 device found: {dev}")
+        raise ValueError("Edison V3 not found.")
     return dev
 
 def setup_device(dev):
     """Configures the USB device for communication."""
-    print("Setting configuration...")
     try:
         dev.set_configuration()
-        print("Configuration set.")
     except usb.core.USBError as e:
         if "Access denied" in str(e):
-            print("Error: Access denied to USB device. You might need to run this script with sudo or ensure appropriate udev rules are in place.", file=sys.stderr)
+            print("Error: Access denied to USB device. Try with sudo.", file=sys.stderr)
             sys.exit(1)
         raise
 
-    print("Checking and detaching kernel drivers...")
     for cfg in dev:
         for intf in cfg:
             if dev.is_kernel_driver_active(intf.bInterfaceNumber):
                 try:
-                    print(f"Detaching kernel driver from interface {intf.bInterfaceNumber}...")
                     dev.detach_kernel_driver(intf.bInterfaceNumber)
-                    print(f"Kernel driver detached from interface {intf.bInterfaceNumber}.")
                 except usb.core.USBError as e:
-                    print(f"Could not detach kernel driver from interface {intf.bInterfaceNumber}: {e}", file=sys.stderr)
+                    print(f"Warning: Could not detach kernel driver: {e}", file=sys.stderr)
     
-    print("Claiming interface 0...")
     usb.util.claim_interface(dev, 0)
-    print("Interface 0 claimed.")
-    
     return dev
 
 def transfer_out(dev, endpoint_address, data):
     """Performs a USB bulk transfer out."""
-    print(f"Transferring {len(data)} bytes OUT to endpoint {hex(endpoint_address)}...")
-    bytes_sent = dev.write(endpoint_address, data)
-    print(f"Sent {bytes_sent} bytes OUT.")
-    return bytes_sent
+    return dev.write(endpoint_address, data)
 
 def transfer_in(dev, endpoint_address, length):
     """Performs a USB bulk transfer in."""
-    print(f"Transferring {length} bytes IN from endpoint {hex(endpoint_address)}...")
-    received_data = dev.read(endpoint_address, length)
-    print(f"Received {len(received_data)} bytes IN.")
-    return received_data
+    return dev.read(endpoint_address, length)
 
 def put_user_program(dev, user_program_data: bytearray):
     """Sends the user program to the Edison V3."""
@@ -165,13 +232,11 @@ def put_user_program(dev, user_program_data: bytearray):
         0, 0
     ])
 
-    print("Sending program header...")
     transfer_out(dev, 0x01, header)
     response = transfer_in(dev, 0x81, 8)
     if not (len(response) == 8 and response[0] == EV3_WEBUSB_HEADER and response[1] == EV3_WEBUSB_CMD_PUT_USER_PROGRAM):
         raise IOError(f"Invalid response to program header: {response.tobytes().hex()}")
     
-    print("Sending program data...")
     transfer_out(dev, 0x01, user_program_data)
     response = transfer_in(dev, 0x81, 8)
     if not (len(response) == 8 and response[0] == EV3_WEBUSB_HEADER and response[1] == EV3_WEBUSB_CMD_PUT_USER_PROGRAM and response[2] == 1):
@@ -182,22 +247,22 @@ def put_user_program(dev, user_program_data: bytearray):
 def build_mpy_cross(mpy_cross_path: str):
     """Builds the mpy-cross executable if it doesn't exist."""
     if not os.path.exists(mpy_cross_path):
-        print("mpy-cross not found, attempting to build it using 'make'...")
+        print("mpy-cross not found, building with 'make'...")
         try:
             subprocess.run(["make"], check=True)
-            print("'make' completed successfully. mpy-cross should now be available.")
+            print("'make' completed successfully.")
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            raise RuntimeError(f"Error: 'make' failed or was not found. Please build mpy-cross manually.", e)
+            raise RuntimeError(f"Error: 'make' failed.", e)
 
 def compile_remotely(py_file_path: str, output_mpy_file: str):
     """
-    Compiles a Python file using the remote Edison API and saves the resulting .mpy bytecode.
+    Compiles a Python file using the remote Edison API.
     """
     try:
         with open(py_file_path, 'r') as f:
             python_code = f.read()
         
-        print(f"Sending {py_file_path} to remote compiler API...")
+        print(f"Sending to remote compiler API...")
         response = requests.post(REMOTE_COMPILE_API_URL, data=python_code, headers={'Content-Type': 'text/plain'})
         response.raise_for_status()
         
@@ -224,7 +289,7 @@ def compile_remotely(py_file_path: str, output_mpy_file: str):
         with open(output_mpy_file, 'wb') as f:
             f.write(compiled_bytes)
             
-        print(f"Remote compilation successful. Saved to {output_mpy_file}")
+        print(f"Remote compilation successful.")
         
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Failed to connect to remote compiler API: {e}")
@@ -242,13 +307,13 @@ def compile_app(app_name: str, mpy_cross_path: str, use_local_compiler: bool) ->
     if os.path.exists(logo_file_path):
         transpile_logo_to_py(logo_file_path, py_file_path)
     elif not os.path.exists(py_file_path):
-        raise FileNotFoundError(f"Application source file not found: checked for main.py and main.logo in {app_dir}")
+        raise FileNotFoundError(f"Application source not found in {app_dir}")
     
     output_mpy_file = os.path.join(app_dir, "main.mpy")
 
     if use_local_compiler:
         build_mpy_cross(mpy_cross_path)
-        print(f"Compiling {py_file_path} to {output_mpy_file} using local {mpy_cross_path}...")
+        print(f"Compiling with local {mpy_cross_path}...")
         try:
             subprocess.run([mpy_cross_path, "-o", output_mpy_file, py_file_path], check=True)
             print("Local compilation successful.")
@@ -264,60 +329,44 @@ def flash_app(mpy_file_path: str):
     Flashes a pre-compiled .mpy file to the Edison V3.
     """
     if not os.path.exists(mpy_file_path):
-        raise FileNotFoundError(f"Compiled MicroPython file not found: {mpy_file_path}. Please build it first.")
+        raise FileNotFoundError(f"Compiled file not found: {mpy_file_path}. Please build first.")
 
     with open(mpy_file_path, 'rb') as f:
         mpy_bytes = f.read()
     
-    mpy_hex_string = mpy_bytes.hex()
-    program_data_to_send = process_api_hex_string(mpy_hex_string)
+    program_data_to_send = process_api_hex_string(mpy_bytes.hex())
 
-    print("Starting Edison V3 device flashing process.")
     dev = find_edison_v3()
-    print("Device found. Proceeding with setup.")
     setup_device(dev)
     
     try:
-        print("Attempting to put user program...")
         put_user_program(dev, program_data_to_send)
-        print("Program flashed to Edison V3 successfully!")
     finally:
-        print("Flashing process finished. Releasing resources.")
         try:
-            print("Releasing interface 0...")
             usb.util.release_interface(dev, 0)
-            print("Interface 0 released.")
         except usb.core.USBError as e:
-            print(f"Warning: Could not release interface 0: {e}", file=sys.stderr)
-        
+            print(f"Warning: Could not release interface: {e}", file=sys.stderr)
         try:
-            print("Attempting to re-attach kernel driver...")
             dev.attach_kernel_driver(0)
-            print("Kernel driver re-attached.")
         except usb.core.USBError as e:
             if "No such device" not in str(e):
                 print(f"Warning: Could not re-attach kernel driver: {e}", file=sys.stderr)
-            else:
-                print("Kernel driver attachment skipped (device not found, possibly disconnected).")
-        
-        print("Disposing USB resources.")
         usb.util.dispose_resources(dev)
-        print("USB resources disposed.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Lore: Edison V3 MicroPython CLI Tool for offline development.")
+    parser = argparse.ArgumentParser(description="Lore: Edison V3 MicroPython CLI Tool.")
     parser.add_argument("--mpy-cross", 
                         default="./micropython-1.27.0/mpy-cross/build/mpy-cross",
-                        help="Path to the mpy-cross executable.")
+                        help="Path to mpy-cross executable.")
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    build_parser = subparsers.add_parser("build", help="Compile a MicroPython or LOGO application.")
+    build_parser = subparsers.add_parser("build", help="Compile a LOGO or MicroPython application.")
     build_parser.add_argument("app_name", help="Name of the application to compile.")
     build_parser.add_argument("--local-compile", action="store_true", 
-                              help="Use the local mpy-cross compiler (experimental).")
+                              help="Use local mpy-cross compiler (experimental).")
 
-    flash_parser = subparsers.add_parser("flash", help="Flash a compiled application to the Edison V3.")
+    flash_parser = subparsers.add_parser("flash", help="Flash a compiled application.")
     flash_parser.add_argument("app_name", help="Name of the application to flash.")
 
     args = parser.parse_args()
@@ -330,19 +379,17 @@ def main():
         if args.command == "build" and not args.local_compile:
             try:
                 import requests
-                import json
             except ImportError:
-                raise RuntimeError("The 'requests' library is required. Please run: pip install requests")
+                raise RuntimeError("'requests' library is required for remote compilation. Run: pip install requests")
 
         if args.command == "build":
             compile_app(args.app_name, args.mpy_cross, args.local_compile)
             print(f"Application '{args.app_name}' built successfully.")
         elif args.command == "flash":
-            # Note: flash always uses the pre-built .mpy file, it doesn't trigger a build.
             mpy_file = os.path.join("apps", args.app_name, "main.mpy")
             if not os.path.exists(mpy_file):
                 print(f"'{mpy_file}' not found. Building application first...")
-                compile_app(args.app_name, args.mpy_cross, False) # Defaults to remote compile for build-on-flash
+                compile_app(args.app_name, args.mpy_cross, False)
             
             flash_app(mpy_file)
             print(f"Application '{args.app_name}' flashed successfully.")
