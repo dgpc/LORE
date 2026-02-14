@@ -18,7 +18,7 @@ Traditionally, programming the Edison V3 robot often involves using web-based in
 *   **Local Development Workflow:** Write MicroPython code in a local editor and manage your projects directly on your machine.
 *   **Command-Line Uploads:** Upload code to the robot directly from your terminal, bypassing the need to interact with web interfaces for flashing.
 *   **Facilitation of AI-Assisted Coding:** The tight feedback loop, without manual copy-pasting, creates an environment for using AI-assisted coding tools like Gemini, Claude Code, Cortex Code, and Codex to write and iterate on code for the Edison robot.
-*   **Choice of Compilation Method:** `lore` defaults to using the official remote Edison API for compilation (which requires an internet connection). It also offers an **experimental** `--local-compile` option for offline compilation using `mpy-cross`.
+*   **Choice of Compilation Method:** `lore` defaults to using the official remote Edison API for compilation (which requires an internet connection). It also supports `--local-compile` for offline compilation using `mpy-cross`, producing byte-identical output to the remote compiler.
 
 ## Future Work
 
@@ -58,11 +58,9 @@ To use `lore`, follow these steps:
     ./lore build nursery_rhymes
     ```
 
-    ### Experimental Local Compilation
+    ### Local Compilation
 
-    Local compilation using `mpy-cross` is an **experimental** feature. The locally compiled `.mpy` files use a different qstr encoding than the remote compiler (full string names vs. pre-defined firmware qstr IDs), and have not yet been validated on robot hardware.
-
-    `lore` includes a local EdPy validator that checks for unsupported features (floats, strings, lists, dicts, tuples, non-Ed imports, try/except, classes) before compilation, matching the remote compiler's restrictions.
+    Local compilation using `mpy-cross` produces **byte-identical** output to the remote Edison API, allowing fully offline development. The local pipeline includes an EdPy validator (rejects unsupported features), constant inlining, and a qstr remapper that matches the Edison firmware's internal string table.
 
     To use local compilation, you must first build `mpy-cross`:
 
