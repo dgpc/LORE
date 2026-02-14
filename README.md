@@ -1,4 +1,4 @@
-# LORE: Edison V3 MicroPython CLI Tool
+# LORE: Edison V3 LOGO and MicroPython CLI Tool
 
 <p align="center">
   <img src="edison_v3.png" width="240">
