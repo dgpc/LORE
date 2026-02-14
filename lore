@@ -722,6 +722,20 @@ def flash_app(mpy_file_path: str):
     program_data_to_send = process_api_hex_string(mpy_bytes.hex())
 
     dev = find_edison_v3()
+    try:
+        print("Edison V3 found, resetting...")
+        dev.reset()
+        # After reset, the device handle is often invalid. We need to find it again.
+        # It may take a moment for the device to re-enumerate.
+        import time
+        time.sleep(1.5) # Allow time for re-enumeration
+        dev = find_edison_v3()
+        print("Edison V3 re-acquired after reset.")
+    except usb.core.USBError as e:
+        print(f"USB reset failed: {e}. Attempting to continue without reset.", file=sys.stderr)
+        # If reset fails, we might still have a valid handle, but it's safer to re-find.
+        dev = find_edison_v3()
+        
     setup_device(dev)
     
     try:
