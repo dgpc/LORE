@@ -2,6 +2,7 @@
 import usb.core
 import usb.util
 import argparse
+import ast
 import subprocess
 import os
 import sys
@@ -279,6 +280,78 @@ def put_user_program(dev, user_program_data: bytearray):
     
     print("Program transferred successfully!")
 
+class EdPyValidator(ast.NodeVisitor):
+    """Validates that a Python AST only uses features supported by EdPy."""
+
+    def __init__(self, filename="main.py"):
+        self.filename = filename
+        self.errors = []
+
+    def _error(self, node, msg):
+        self.errors.append(f"{self.filename}:{node.lineno}: {msg}")
+
+    def visit_Constant(self, node):
+        if isinstance(node.value, float):
+            self._error(node, f"constant {node.value} must be an integer value")
+        elif isinstance(node.value, str):
+            self._error(node, "string not allowed here")
+        elif isinstance(node.value, bytes):
+            self._error(node, "string not allowed here")
+        self.generic_visit(node)
+
+    def visit_List(self, node):
+        self._error(node, "list not allowed here")
+        self.generic_visit(node)
+
+    def visit_Dict(self, node):
+        self._error(node, "dict expr not supported in Ed.Py")
+        self.generic_visit(node)
+
+    def visit_Tuple(self, node):
+        self._error(node, "tuple expr not supported in Ed.Py")
+        self.generic_visit(node)
+
+    def visit_Set(self, node):
+        self._error(node, "set expr not supported in Ed.Py")
+        self.generic_visit(node)
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            if alias.name != "Ed":
+                self._error(node, f"only the Ed module can be imported")
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node):
+        self._error(node, "only the Ed module can be imported")
+        self.generic_visit(node)
+
+    def visit_Try(self, node):
+        self._error(node, "try/except not supported in Ed.Py")
+        self.generic_visit(node)
+
+    # Python 3.11+
+    def visit_TryStar(self, node):
+        self._error(node, "try/except not supported in Ed.Py")
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node):
+        self._error(node, "classes not supported in Ed.Py")
+        self.generic_visit(node)
+
+
+def validate_edpy(py_file_path: str):
+    """Validates a Python file against EdPy restrictions. Returns list of error strings."""
+    with open(py_file_path, 'r') as f:
+        source = f.read()
+    try:
+        tree = ast.parse(source, filename=py_file_path)
+    except SyntaxError:
+        return []  # mpy-cross will catch syntax errors
+    validator = EdPyValidator(filename="main.py")
+    validator.visit(tree)
+    return validator.errors
+
+
 def build_mpy_cross(mpy_cross_path: str):
     """Builds the mpy-cross executable if it doesn't exist."""
     if not os.path.exists(mpy_cross_path):
@@ -347,6 +420,9 @@ def compile_app(app_name: str, mpy_cross_path: str, use_local_compiler: bool) ->
     output_mpy_file = os.path.join(app_dir, "main.mpy")
 
     if use_local_compiler:
+        edpy_errors = validate_edpy(py_file_path)
+        if edpy_errors:
+            raise RuntimeError(f"EdPy validation failed:\n" + "\n".join(edpy_errors))
         build_mpy_cross(mpy_cross_path)
         print(f"Compiling with local {mpy_cross_path}...")
         result = subprocess.run(
@@ -401,7 +477,7 @@ def main():
     build_parser = subparsers.add_parser("build", help="Compile a LOGO or MicroPython application.")
     build_parser.add_argument("app_name", help="Name of the application to compile.")
     build_parser.add_argument("--local-compile", action="store_true",
-                              help="Use local mpy-cross compiler instead of remote API.")
+                              help="Use local mpy-cross compiler (experimental).")
 
     flash_parser = subparsers.add_parser("flash", help="Flash a compiled application.")
     flash_parser.add_argument("app_name", help="Name of the application to flash.")

@@ -59,9 +59,9 @@ The goal of this phase is to enhance the `build` command to automatically transp
     - [x] `apps/logo_variables` — MAKE, THING, IFELSE, arithmetic expressions.
     - [x] All test apps validated against the remote Edison compiler.
 
-## Phase 3: Make Local Compilation Reliable (Completed)
+## Phase 3: Make Local Compilation Reliable
 
-The goal of this phase was to make the `--local-compile` feature robust and reliable.
+The goal of this phase is to make the experimental `--local-compile` feature robust and reliable, producing output that works on the Edison V3 robot.
 
 - [x] **Verify `mpy-cross` Compatibility:**
     - [x] MicroPython 1.27.0 `mpy-cross` produces mpy v6 format with 31-bit small ints — matching the remote compiler's header.
@@ -74,12 +74,21 @@ The goal of this phase was to make the `--local-compile` feature robust and reli
     - [x] Created `apps/edpy_test_conditionals` — `if`/`elif`/`else`, comparison operators. Pass (both compilers).
     - [x] Created `apps/edpy_test_functions` — `def`, `return`, parameters, recursion. Pass (both compilers).
     - [x] Created `apps/edpy_test_variables` — assignment, arithmetic, `abs()`. Pass (both compilers).
-    - [x] Created `apps/edpy_test_unsupported` — strings, floats, lists, dicts, imports. Remote rejects (e.g., "constant 3.14 must be an integer value"); local mpy-cross accepts (no EdPy-specific validation).
+    - [x] Created `apps/edpy_test_unsupported` — strings, floats, lists, dicts, imports. Remote rejects; local validator now also rejects.
 
 - [x] **Improve Local Compilation Error Handling:**
     - [x] `mpy-cross` reports syntax errors to stderr in `File "path", line N / SyntaxError: message` format.
     - [x] Updated `compile_app()` to capture stderr via `capture_output=True` and display formatted errors.
-    - [x] Removed "experimental" label from README.md and CLI help text.
+
+- [x] **Local EdPy Validator:**
+    - [x] Implemented `EdPyValidator` using Python's `ast` module to check for unsupported features before compilation.
+    - [x] Rejects: floats, strings, bytes, lists, dicts, tuples, sets, non-Ed imports, try/except, classes.
+    - [x] Matches remote compiler restrictions discovered by testing against the API.
+
+- [ ] **Validate on Robot Hardware:**
+    - [ ] Flash locally compiled `.mpy` files to an Edison V3 and verify they execute correctly.
+    - [ ] The key risk is the different qstr encoding: local embeds full string names, remote uses pre-defined firmware qstr IDs. The firmware may or may not resolve the local encoding correctly.
+    - [ ] If firmware rejects local `.mpy` files, investigate providing a qstr definition file or matching the remote compiler's qstr table.
 
 ## Phase 4: Bootable Dev Environment
 
