@@ -740,7 +740,7 @@ def flash_app(mpy_file_path: str):
         usb.util.dispose_resources(dev)
 
 def main():
-    parser = argparse.ArgumentParser(description="Lore: Edison V3 MicroPython CLI Tool.")
+    parser = argparse.ArgumentParser(description="LORE: Edison V3 MicroPython CLI Tool.")
     parser.add_argument("--mpy-cross", 
                         default="./micropython-1.27.0/mpy-cross/build/mpy-cross",
                         help="Path to mpy-cross executable.")

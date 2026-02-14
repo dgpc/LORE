@@ -1,14 +1,14 @@
 # Project Plan & TODOs
 
-This document outlines the development plan and tasks for the `lore` project.
+This document outlines the development plan and tasks for the LORE project.
 
 ## Phase 1: Core Functionality (Completed)
 
 - [x] Reverse-engineer the Edison V3 WebUSB protocol.
-- [x] Create a Python CLI tool (`lore`) for flashing compiled MicroPython code.
+- [x] Create a Python CLI tool (LORE) for flashing compiled MicroPython code.
 - [x] Implement local `mpy-cross` build process via `Makefile`.
 - [x] Implement remote compilation via the official EdPy API.
-- [x] Refactor `lore` to use `build` and `flash` subcommands.
+- [x] Refactor LORE to use `build` and `flash` subcommands.
 - [x] Structure applications into an `apps/` directory.
 
 ## Phase 2: LOGO to EdPy Transpiler (Completed)
