@@ -84,7 +84,7 @@ To use LORE, follow these steps:
 
 ## Maintaining the Edison Constant and Qstr Tables
 
-The local compiler relies on two reverse-engineered tables embedded in `lore`:
+The local compiler relies on two reverse-engineered tables embedded in the `lore` executable:
 
 - **`EDISON_CONSTANTS`** — maps `Ed.CONSTANT_NAME` to integer values (e.g., `Ed.FORWARD` = `1`)
 - **`EDISON_QSTR_IDS`** — maps string names to the Edison firmware's static qstr IDs (e.g., `"Drive"` = `11`)

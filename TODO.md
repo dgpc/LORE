@@ -107,18 +107,18 @@ The goal of this phase is to create a self-contained, bootable Linux image that 
     - [ ] Add `pip` and configure it to install `pyusb` and `requests` into the rootfs.
     - [ ] Add a lightweight text editor package (e.g., `nano` or `vim`).
     - [ ] Add `git` and `make` to the package list.
-    - [ ] Create a mechanism to clone or include the `lore` project repository into the image's filesystem (e.g., via a post-build script).
+    - [ ] Create a mechanism to clone or include the LORE project repository into the image's filesystem (e.g., via a post-build script).
 
 - [ ] **Environment and Autostart:**
     - [ ] Configure the system to automatically start a shell on the main TTY (full-screen terminal).
     - [ ] Create a login script (`/etc/profile`) that provides a welcome message and instructions on how to use the environment.
 
-- [ ] **Enhance `lore` for REPL functionality:**
-    - [ ] Add a `repl` subcommand to the `lore` tool.
+- [ ] **Enhance LORE for REPL functionality:**
+    - [ ] Add a `repl` subcommand to LORE.
     - [ ] This subcommand should launch an interactive Python REPL.
     - [ ] Investigate mocking the `Ed` library functions within the REPL for a better interactive experience.
 
 - [ ] **Image Creation and Testing:**
     - [ ] Build the complete Linux image as a bootable `.iso` file.
     - [ ] Test booting the image in a virtual machine (e.g., QEMU or VirtualBox).
-    - [ ] Verify that the environment works as expected: `lore` is usable, the editor works, and the system can interact with USB devices passed through to the VM.
+    - [ ] Verify that the environment works as expected: LORE is usable, the editor works, and the system can interact with USB devices passed through to the VM.

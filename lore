@@ -152,16 +152,15 @@ class LogoToEdPyTranspiler:
         elif data == "funccall":
             name = str(self._tokens(node, "NAME")[0]).upper()
             if name not in self.functions:
-                print(f"Warning: Unknown function '{name}'. Skipping.", file=sys.stderr)
-                return []
+                raise RuntimeError(f"Unknown function '{name}'")
+
             # Build argument list from expr children
             expr_children = [c for c in node.children if not (isinstance(c, Token) and c.type == "NAME")]
             args = [self._process_expr(e) for e in expr_children]
             args_str = ", ".join(args)
             return [indent + f"{name.lower()}({args_str})"]
         else:
-            print(f"Warning: Unsupported node type '{data}'. Skipping.", file=sys.stderr)
-            return []
+            raise RuntimeError(f"Unsupported LOGO command '{data}'")
 
 
 def transpile_logo_to_py(logo_file_path: str, py_file_path: str):
