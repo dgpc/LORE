@@ -234,15 +234,23 @@ def setup_device(dev):
         if "Access denied" in str(e):
             print("Error: Access denied to USB device. Try with sudo.", file=sys.stderr)
             sys.exit(1)
-        raise
+        # This error is often harmless, e.g., if already configured.
+        print(f"Ignoring error during set_configuration: {e}", file=sys.stderr)
 
-    for cfg in dev:
-        for intf in cfg:
-            if dev.is_kernel_driver_active(intf.bInterfaceNumber):
-                try:
-                    dev.detach_kernel_driver(intf.bInterfaceNumber)
-                except usb.core.USBError as e:
-                    print(f"Warning: Could not detach kernel driver: {e}", file=sys.stderr)
+    # set_configuration() can cause the device to re-enumerate, making the
+    # current device handle stale. We MUST release it and get a new one.
+    usb.util.dispose_resources(dev)
+    import time
+    time.sleep(1.5) # Give the OS time to settle.
+    dev = find_edison_v3()
+
+    # Now, with a fresh handle, we can safely detach the kernel driver.
+    try:
+        if dev.is_kernel_driver_active(0):
+            print("Detaching kernel driver...")
+            dev.detach_kernel_driver(0)
+    except usb.core.USBError as e:
+        print(f"Warning: Could not detach kernel driver: {e}", file=sys.stderr)
     
     usb.util.claim_interface(dev, 0)
     return dev
@@ -721,36 +729,40 @@ def flash_app(mpy_file_path: str):
     
     program_data_to_send = process_api_hex_string(mpy_bytes.hex())
 
-    dev = find_edison_v3()
+    dev = None
     try:
-        print("Edison V3 found, resetting...")
-        dev.reset()
-        # After reset, the device handle is often invalid. We need to find it again.
-        # It may take a moment for the device to re-enumerate.
-        import time
-        time.sleep(1.5) # Allow time for re-enumeration
         dev = find_edison_v3()
-        print("Edison V3 re-acquired after reset.")
-    except usb.core.USBError as e:
-        print(f"USB reset failed: {e}. Attempting to continue without reset.", file=sys.stderr)
-        # If reset fails, we might still have a valid handle, but it's safer to re-find.
-        dev = find_edison_v3()
-        
-    setup_device(dev)
-    
-    try:
+        try:
+            print("Edison V3 found, resetting...")
+            dev.reset()
+            import time
+            time.sleep(1.5)
+            dev = find_edison_v3()
+            print("Edison V3 re-acquired after reset.")
+        except usb.core.USBError as e:
+            print(f"USB reset failed: {e}. Re-finding device...", file=sys.stderr)
+            dev = find_edison_v3()
+            
+        dev = setup_device(dev)
         put_user_program(dev, program_data_to_send)
+
     finally:
-        try:
-            usb.util.release_interface(dev, 0)
-        except usb.core.USBError as e:
-            print(f"Warning: Could not release interface: {e}", file=sys.stderr)
-        try:
-            dev.attach_kernel_driver(0)
-        except usb.core.USBError as e:
-            if "No such device" not in str(e):
-                print(f"Warning: Could not re-attach kernel driver: {e}", file=sys.stderr)
-        usb.util.dispose_resources(dev)
+        if dev is not None:
+            try:
+                usb.util.release_interface(dev, 0)
+            except usb.core.USBError:
+                # This can fail if the device has already disconnected, which is fine.
+                pass
+            try:
+                # Re-attaching the kernel driver is mainly for Linux.
+                # It can cause issues on macOS and isn't always necessary.
+                if not sys.platform.startswith("darwin"):
+                    dev.attach_kernel_driver(0)
+            except usb.core.USBError:
+                # This can also fail if the device is gone or driver was not active.
+                pass
+            # Finally, dispose of the device handle.
+            usb.util.dispose_resources(dev)
 
 def main():
     parser = argparse.ArgumentParser(description="LORE: Edison V3 MicroPython CLI Tool.")
