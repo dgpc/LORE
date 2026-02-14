@@ -24,6 +24,30 @@ LORE enhances the development experience by providing:
 
 ## Getting Started
 
+LORE allows you to program the Edison V3 robot using either MicroPython or a subset of the LOGO language. The following examples both drive the Edison robot in an equilateral triangle.
+
+### LOGO Example
+
+```logo
+REPEAT 3 [
+  FORWARD 100
+  LEFT 120
+]
+```
+
+### MicroPython Example
+
+```python
+import Ed
+
+Ed.EdisonVersion = Ed.V3
+Ed.Speed = Ed.SPEED_4
+
+for _ in range(3):
+    Ed.Drive(Ed.FORWARD, Ed.DISTANCE_CM(10), Ed.SPEED_4) # Drive forward 10cm
+    Ed.Rotate(Ed.LEFT, Ed.DEGREES_360(120), Ed.SPEED_4) # Turn left 120 degrees
+```
+
 To use LORE, follow these steps:
 
 1.  **Activate Virtual Environment**: It is recommended to work within a Python virtual environment. To create one:
@@ -44,7 +68,7 @@ To use LORE, follow these steps:
     pip install pyusb requests lark
     ```
 
-3.  **Create Your Application**: Place your MicroPython `.py` files within the `apps/<your_app_name>/` directory. For example, `apps/line_following/main.py`.
+3.  **Create Your Application**: Place your MicroPython `main.py` or LOGO `main.logo` files within the `apps/<your_app_name>/` directory. For example, `apps/line_following/main.py` or `apps/logo_square/main.logo`.
 
 4.  **Build Your Application**: Before your first build, compile `mpy-cross`:
 
