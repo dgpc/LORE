@@ -7,7 +7,7 @@
 
 **LORE** is a command-line utility for interacting with the Edison V3 robot.
 
-It allows you to write programs for the Edison robot in a subset of the LOGO programming langauge, rather than EdScratch or EdPy. Whether you use LOGO or EdPy, in enables offline compilation and a utility to upload programs to the robot from the command-line.
+It allows you to write programs for the Edison robot in a subset of the LOGO programming langauge, rather than EdScratch or EdPy. Whether you use [LOGO](LOGO.md) or EdPy, in enables offline compilation and a utility to upload programs to the robot from the command-line.
 
 For more information about the Edison V3 robot, you can visit the official resource page: [Edison V3.0 Robot](https://www.geyerinstructional.com/edison-v3-0-robot-edpack).
 
